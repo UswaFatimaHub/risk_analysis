@@ -44,6 +44,140 @@ Risk_Data_Source = Annotated[
     Field(min_length=1, description="Must contain at least one source (e.g., ['CSA'])."),
 ]
 
+class RiskLLMInput(BaseModel):
+
+    Function: Literal[
+        "Accounting & Billing", "Budgeting", "Procurement", "All"
+    ] = Field(..., description="Select the business function this risk belongs to. Must match one of the predefined categories in the risk register.")
+
+    Process_Name: Optional[str] = Field(
+        None, description="Name of the high-level process (e.g., Payroll, Supplier Onboarding, Budgeting). Should align with CSA questionnaire sections."
+    )
+    Sub_Process: Optional[str] = Field(
+        None, description="Specific sub-process or activity (e.g., Payroll Compliance, Vendor Compliance)."
+    )
+    SOP_Available: str = Field(
+        ...,
+        description=(
+            "Whether a Standard Operating Procedure (SOP) exists for the process. "
+            'Write "Yes" if SOP exists, "No" if not. '
+            'If SOP exists but is outdated, write as "Yes (last updated YYYY)" using the year mentioned in CSA. '
+            "Do not invent a year if not explicitly provided."
+        )
+    )
+
+    Risk_Description: str = Field(..., description="Detailed description of the risk event in plain language.")
+
+    Risk_Causal_Factors: Literal[
+        "People", "Process", "System", "External Factor"
+    ] = Field(..., description="Primary driver of the risk. Choose one root factor only.")
+
+    Risk_Category: Literal[
+        "Reporting", "Strategic", "Compliance", "IT", "Operational", "ALL"
+    ] = Field(..., description="Risk category classification, based on the register’s predefined list.")
+
+    Level2: Optional[str] = Field(
+        None, description="Custom secondary classification (e.g., 'Payroll Compliance', 'System Failure'). Free text, used only for sub-categorization."
+    )
+
+    Root_Cause: Optional[str] = Field(
+        None, description="Deatiled underlying cause explaining why the risk exists (e.g., Outdated SOP, lack of monitoring)."
+    )
+    Risk_Impact_Description: Optional[str] = Field(
+        None, description="Detailed description of the consequences if the risk materializes."
+    )
+
+    Risk_Data_Sources: Risk_Data_Source
+
+    Risk_Likelihood: Optional[
+        Literal["Highly Likely", "Expected", "Possible", "Not Likely", "Remote"]
+    ] = Field(None, description="Likelihood rating of the risk occurring, based on CSA or interviews.")
+
+    Risk_Impact: Optional[
+        Literal["Severe", "Major", "Moderate", "Minor", "Insignificant"]
+    ] = Field(None, description="Impact rating if the risk occurs, based on CSA or interviews.")
+
+    Risk_Owner: Optional[str] = Field(
+        None, description="Role or title responsible for managing this risk (e.g., CFO, Procurement Manager)."
+    )
+
+    Control: Optional[str] = Field(
+        None, description="Short name or title of the control (e.g., 'Payroll validation rules in ERP')."
+    )
+    Control_Description: Optional[str] = Field(
+        None, description="Detailed description of how the control works and its purpose."
+    )
+    Control_Frequency: Optional[
+        Literal[
+            "On Going",
+            "Daily",
+            "Weekly",
+            "Monthly",
+            "Quarterly",
+            "Half Yearly",
+            "Annually",
+            "On Demand",
+            "NA",
+        ]
+    ] = Field(None, description="How often the control is executed (e.g., Monthly, Quarterly).")
+
+    Control_Type: Optional[
+        Literal["Preventive", "Detective", "Directive", "NA"]
+    ] = Field(None, description="Whether the control is Preventive, Detective, or Directive.")
+
+    Control_Category: Optional[
+        Literal["Manual", "Automated", "Both", "NA"]
+    ] = Field(None, description="Whether the control is manual, automated, or a hybrid (Both).")
+
+    Control_Classification: Optional[
+        Literal[
+            "Access Control",
+            "Reconciliation",
+            "Review",
+            "Verification and Authorization",
+            "IT / System Control",
+            "Process Control",
+            "Maker Checker",
+            "Physical Control",
+            "Other",
+            "NA",
+        ]
+    ] = Field(None, description="Classification of control activity, chosen from the register’s list.")
+
+    Control_Design_Effectiveness: Optional[
+        Literal["Poor", "Unsatisfactory", "Satisfactory", "Effective", "Highly Effective"]
+    ] = Field(None, description="Assessment of how well the control is designed on paper.")
+
+    Control_Operating_Effectiveness: Optional[
+        Literal["Poor", "Unsatisfactory", "Satisfactory", "Effective", "Highly Effective"]
+    ] = Field(None, description="Assessment of how well the control operates in practice.")
+
+    Residual_Risk: Optional[str] = Field(
+        None, description="Remaining risk after considering control effectiveness. If not provided, leave TBD."
+    )
+
+    Remarks: Optional[str] = Field(
+        None, description="Context-specific notes or issues (avoid generic remarks; tailor per risk)."
+    )
+    Action_Required: Optional[str] = Field(
+        None, description="Specific mitigation required (e.g., 'Update SOPs', 'Automate GOSI filing'). Must be descriptive, not numeric codes."
+    )
+    Action_Plan_Reference: Optional[str] = Field(
+        None, description="Identifier for the related action plan (e.g., Action_Procurement_1)."
+    )
+    Action_Plan_Item: Optional[str] = Field(
+        None, description="Concrete activity planned to address the risk (e.g., 'Upgrade ERP system')."
+    )
+    Target_Date: Optional[str] = Field(
+        None, description="Planned completion date for the action (e.g., 'Q4 2025'). TBD, if not provided"
+    )
+
+class RiskLLMInputRegister(BaseModel):
+    risks: List[RiskLLMInput] = Field(
+        ..., description="List of all risks captured from CSA questionnaire."
+    )
+
+
 class Risk(BaseModel):
     Function: Literal[
         "Accounting & Billing", "Budgeting", "Procurement", "All"
@@ -56,14 +190,14 @@ class Risk(BaseModel):
         None, description="Specific sub-process or activity (e.g., Payroll Compliance, Vendor Compliance)."
     )
 
-    SOP_Available: Literal["Yes", "No"] = Field(
-        ..., description="Whether a Standard Operating Procedure (SOP) exists for the process. If outdated, mark as Yes but include update year in Remarks."
+    SOP_Available: str = Field(
+        ..., description="Whether a Standard Operating Procedure (SOP) exists for the process. If outdated, mark as Yes but include update year."
     )
 
     Risk_Event_Reference: str = Field(
         ..., description="Unique identifier for the risk (e.g., Risk_Finance_1). Each risk must have a distinct ID."
     )
-    Risk_Description: str = Field(..., description="Concise description of the risk event in plain language.")
+    Risk_Description: str = Field(..., description="Detailed description of the risk event in plain language.")
 
     Risk_Causal_Factors: Literal[
         "People", "Process", "System", "External Factor"
@@ -109,17 +243,7 @@ class Risk(BaseModel):
     )
 
     Control_Frequency: Optional[
-        Literal[
-            "On Going",
-            "Daily",
-            "Weekly",
-            "Monthly",
-            "Quarterly",
-            "Half Yearly",
-            "Annually",
-            "On Demand",
-            "NA",
-        ]
+        Literal[ "On Going", "Daily", "Weekly", "Monthly", "Quarterly", "Half Yearly", "Annually", "On Demand", "NA",]
     ] = Field(None, description="How often the control is executed (e.g., Monthly, Quarterly).")
 
     Control_Type: Optional[

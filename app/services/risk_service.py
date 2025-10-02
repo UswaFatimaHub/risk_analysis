@@ -6,7 +6,7 @@ from typing import Optional
 
 from app.models.schemas import (
     ProcessedQuestionnaire, QuestionnaireStatus, RiskRegister, 
-    QuestionnaireRequest
+    QuestionnaireRequest, RiskLLMInputRegister, Risk
 )
 from app.services.llm_service import LLMService
 from app.database.mongodb import get_database
@@ -22,18 +22,16 @@ class RiskAssessmentService:
         self.system_prompt = """You are a risk assessment agent. 
 You will be given Control Self-Assessment (CSA) questionnaire and interview answers.
 
-Your task is to generate a Risk Register in JSON format following the schema below.
+Your task is to generate a complete Risk Register, identifying maximum risks in JSON format following the schema below.
 
 Rules:
-1. Populate fields only with information explicitly provided in CSA or interviews.
+1. Populate fields only with detailed information explicitly provided in CSA.
 2. If information is missing, use "TBD" or null — never invent data.
 3. SOP_Available: If SOPs exist but are outdated, write "Yes (last updated YYYY)".
-4. Risk_Event_Reference: Assign a unique ID (e.g., Risk_Finance_CSA1).
-5. Risk Likelihood / Impact / Combined Risk Assessment: If not rated, mark as "TBD".
-6. Controls: Always use CSA-provided Preventive, Detective, Corrective controls. Multiple may apply.
-7. Residual_Risk: Leave as "TBD" if not assessed.
-8. Target_Date: If CSA mentions improvement deadlines, include them; otherwise "TBD".
-9. Do not add fields not in the schema. Do not invent new risks.
+4. Do not use placeholders or generic text.
+5. Controls: Always use CSA-provided Preventive, Detective, Corrective controls. Multiple may apply.
+6. Do not add fields not in the schema. Do not invent new risks.
+7. Identify and describe every risk separately and in detail — do not merge multiple risks into one.
 
 Return valid JSON that matches the schema exactly.
 """
@@ -94,12 +92,29 @@ Return valid JSON that matches the schema exactly.
             
             # Process with LLM to generate risk register
             logger.info(f"Processing questionnaire {questionnaire_id} with LLM")
-            risk_register = await self.llm_service.parse_response(
-                schema=RiskRegister,
+            llm_risks = await self.llm_service.parse_response(
+                schema=RiskLLMInputRegister,
                 system_prompt=self.system_prompt,
                 user_prompt=questionnaire_data
             )
+            if not llm_risks or not llm_risks.risks:
+                raise Exception("Failed to generate risks from LLM")
             
+            enriched_risks = []
+            for idx, risk in enumerate(llm_risks.risks, start=1):
+                # Get the model data and update with generated references
+                risk_data = risk.model_dump()
+                risk_data.update({
+                    "Risk_Event_Reference": f"Risk_{department}_{idx}",
+                    "Control_Ref": f"Control_{department}_{idx}",
+                    "Action_Plan_Reference": f"Action_{department}_{idx}",
+                    "Risk_Data_Sources": ["CSA"],
+                })
+                enriched = Risk(**risk_data)
+                enriched_risks.append(enriched)
+
+            risk_register = RiskRegister(risks=enriched_risks)
+
             if risk_register:
                 # Update with risk register
                 await db.questionnaires.update_one(
